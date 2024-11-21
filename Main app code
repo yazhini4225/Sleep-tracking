@@ -1,0 +1,172 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
+void main() {
+  runApp(SleepTrackerApp());
+}
+
+class SleepTrackerApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Sleep Tracker',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: SleepTrackerHome(),
+    );
+  }
+}
+
+class SleepTrackerHome extends StatefulWidget {
+  @override
+  _SleepTrackerHomeState createState() => _SleepTrackerHomeState();
+}
+
+class _SleepTrackerHomeState extends State<SleepTrackerHome> {
+  TimeOfDay? sleepTime;
+  TimeOfDay? wakeTime;
+  List<Map<String, dynamic>> sleepHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSleepHistory();
+  }
+
+  Future<void> _loadSleepHistory() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? history = prefs.getString('sleepHistory');
+    if (history != null) {
+      setState(() {
+        sleepHistory = List<Map<String, dynamic>>.from(jsonDecode(history));
+      });
+    }
+  }
+
+  Future<void> _saveSleepHistory() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.setString('sleepHistory', jsonEncode(sleepHistory));
+  }
+
+  void _selectSleepTime(BuildContext context) async {
+    TimeOfDay? picked =
+        await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (picked != null) {
+      setState(() {
+        sleepTime = picked;
+      });
+    }
+  }
+
+  void _selectWakeTime(BuildContext context) async {
+    TimeOfDay? picked =
+        await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    if (picked != null) {
+      setState(() {
+        wakeTime = picked;
+      });
+    }
+  }
+
+  void _calculateSleepDuration() {
+    if (sleepTime == null || wakeTime == null) return;
+
+    DateTime sleepDateTime = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+      sleepTime!.hour,
+      sleepTime!.minute,
+    );
+
+    DateTime wakeDateTime = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+      wakeTime!.hour,
+      wakeTime!.minute,
+    );
+
+    if (wakeDateTime.isBefore(sleepDateTime)) {
+      wakeDateTime = wakeDateTime.add(Duration(days: 1));
+    }
+
+    Duration duration = wakeDateTime.difference(sleepDateTime);
+    String formattedDuration =
+        "${duration.inHours} hours and ${duration.inMinutes.remainder(60)} minutes";
+
+    setState(() {
+      sleepHistory.insert(0, {
+        'sleepTime': sleepTime!.format(context),
+        'wakeTime': wakeTime!.format(context),
+        'duration': formattedDuration,
+      });
+      _saveSleepHistory();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Sleep Tracker'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Set Your Sleep and Wake Times',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton(
+                  onPressed: () => _selectSleepTime(context),
+                  child: Text(sleepTime == null
+                      ? 'Select Sleep Time'
+                      : 'Sleep: ${sleepTime!.format(context)}'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _selectWakeTime(context),
+                  child: Text(wakeTime == null
+                      ? 'Select Wake Time'
+                      : 'Wake: ${wakeTime!.format(context)}'),
+                ),
+              ],
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _calculateSleepDuration,
+              child: Text('Calculate Sleep Duration'),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Sleep History',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: sleepHistory.length,
+                itemBuilder: (context, index) {
+                  final history = sleepHistory[index];
+                  return Card(
+                    margin: EdgeInsets.symmetric(vertical: 8),
+                    child: ListTile(
+                      title: Text(
+                          'Sleep: ${history['sleepTime']} - Wake: ${history['wakeTime']}'),
+                      subtitle: Text('Duration: ${history['duration']}'),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
